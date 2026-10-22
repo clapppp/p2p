@@ -1,0 +1,10 @@
+{
+  "name": "peercon-docs",
+  "version": "1.0.0",
+  "description": "PeerCon documentation package consumed by the blog (Java project, docs only)",
+  "private": false,
+  "files": [
+    "docs"
+  ],
+  "license": "MIT"
+}

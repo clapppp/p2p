@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        #chatBox {
+            width: 100%;
+            height: 300px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #f9f9f9;
+        }
+
+        #status {
+            font-weight: bold;
+            color: blue;
+            margin-bottom: 10px;
+        }
+
+        input {
+            width: 70%;
+            padding: 5px;
+        }
+
+        button {
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+<h1 id="header">Chat with: </h1>
+<div id="status">Status: Disconnected</div>
+
+<div id="chatBox"></div>
+
+<input type="text" id="msgInput" placeholder="Type a message..." disabled>
+<button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+<br><br>
+<button onclick="startConnection()">Connect P2P</button>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const desktopName = urlParams.get('name');
+    document.getElementById('header').innerHTML = `Chat with: ${desktopName}`;
+
+    let peerConnection;
+    let dataChannel;
+    const config = {
+        iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
+    };
+
+    async function startConnection() {
+        log("Creating PeerConnection...");
+        peerConnection = new RTCPeerConnection(config);
+
+        dataChannel = peerConnection.createDataChannel("chat");
+        dataChannel.onopen = () => {
+            log("Connected! You can chat now.");
+            document.getElementById('msgInput').disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+        };
+        dataChannel.onmessage = (event) => {
+            appendChat("Desktop: " + event.data);
+        };
+
+        peerConnection.onicegatheringstatechange = () => {
+            if (peerConnection.iceGatheringState === 'complete') {
+                sendOffer(peerConnection.localDescription);
+            }
+        };
+        peerConnection.onsignalingstatechange = () => {
+            console.log(`🚦 Signaling State 변경: ${peerConnection.signalingState}`);
+        };
+
+        try {
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            log("Gathering ICE candidates...");
+        } catch (err) {
+            log("Error: " + err);
+        }
+    }
+
+    async function sendOffer(sdp) {
+        log("Sending Offer to Server...");
+
+        await fetch('/api/signal?name=' + encodeURIComponent(desktopName), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sdp: sdp.sdp})
+        });
+
+        log("Waiting for Answer...");
+        pollAnswer();
+    }
+
+    function pollAnswer() {
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/poll?name=' + encodeURIComponent(desktopName));
+                const text = await res.text();
+
+                if (text && text.length > 10) {
+                    log("Received Answer from Server!");
+                    clearInterval(interval);
+
+                    const answer = {type: 'answer', sdp: text};
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }, 1000);
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('msgInput');
+        const msg = input.value;
+        if (dataChannel && dataChannel.readyState === 'open' && msg) {
+            dataChannel.send(msg); // P2P 전송
+            appendChat("Me: " + msg);
+            input.value = '';
+        }
+    }
+
+    function appendChat(text) {
+        const box = document.getElementById('chatBox');
+        box.innerHTML += `<div>${text}</div>`;
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function log(msg) {
+        document.getElementById('status').innerText = "Status: " + msg;
+        console.log(msg);
+    }
+</script>
+</body>
+</html>

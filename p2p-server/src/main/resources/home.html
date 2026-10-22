@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Active Users</title>
+    <style>
+        li {
+            cursor: pointer;
+            color: blue;
+            text-decoration: underline;
+            margin: 5px 0;
+        }
+
+        li:hover {
+            color: darkblue;
+        }
+    </style>
+    <script>
+        function refreshList() {
+            fetch('/api/list')
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('userList');
+                    list.innerHTML = '';
+                    document.getElementById('total').innerText = data.length;
+
+                    data.forEach(item => {
+                        const li = document.createElement('li');
+                        li.innerText = `${item.name} (${item.addr})`;
+                        li.onclick = () => window.location.href = '/view?name=' + encodeURIComponent(item.name);
+                        list.appendChild(li);
+                    });
+                })
+                .catch(err => console.error('Error fetching list:', err));
+        }
+
+        setInterval(refreshList, 3000);
+        window.onload = refreshList;
+    </script>
+</head>
+<body>
+<h1>Current Active Users</h1>
+<ul id="userList"></ul>
+<p>Total: <span id="total">0</span></p>
+</body>
+</html>
